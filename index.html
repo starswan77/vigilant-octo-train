@@ -148,6 +148,34 @@
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .swatch { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
 
+  /* 모드 선택 바 */
+  .modebar {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+    justify-content: center; margin-bottom: 12px; font-size: 13px; color: #ccc;
+  }
+  .modebar .group { display: inline-flex; align-items: center; gap: 6px; }
+  .seg { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid #555; }
+  .seg button {
+    background: #3a3a3a; color: #ccc; border: none; padding: 6px 12px;
+    font-size: 13px; font-weight: 600; border-radius: 0; cursor: pointer;
+  }
+  .seg button:hover { background: #474747; }
+  .seg button.active { background: #5a8dee; color: #fff; }
+  .hidden { display: none !important; }
+
+  /* 말 설명(툴팁) */
+  #pieceInfo {
+    background: #2f2f2f; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+    min-height: 60px; font-size: 13px; line-height: 1.55;
+  }
+  #pieceInfo .pi-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  #pieceInfo .pi-glyph { font-size: 30px; line-height: 1; }
+  #pieceInfo .pi-glyph.white { color: #fff; text-shadow: 0 0 1px #000, 0 0 2px #000; }
+  #pieceInfo .pi-glyph.black { color: #111; text-shadow: 0 0 1px #000; }
+  #pieceInfo .pi-name { font-size: 15px; font-weight: 700; color: #fff; }
+  #pieceInfo .pi-desc { color: #cfcfcf; }
+  #pieceInfo .pi-empty { color: #888; }
+
   /* 승급 선택 모달 */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.6);
@@ -170,7 +198,30 @@
 </head>
 <body>
   <h1>♟️ 가족 체스</h1>
-  <div class="subtitle">말을 누르면 갈 수 있는 칸이 표시돼요. 둘이서 번갈아 두세요!</div>
+  <div class="subtitle">말을 누르면 갈 수 있는 칸이 표시돼요. 말 설명도 함께 보여줘요!</div>
+
+  <div class="modebar">
+    <div class="group">
+      <span>상대</span>
+      <div class="seg" id="modeSeg">
+        <button data-mode="2p" class="active">👫 둘이서</button>
+        <button data-mode="ai">🤖 컴퓨터</button>
+      </div>
+    </div>
+    <div class="group hidden" id="aiOptions">
+      <span>난이도</span>
+      <div class="seg" id="diffSeg">
+        <button data-diff="1">쉬움</button>
+        <button data-diff="2" class="active">보통</button>
+        <button data-diff="3">어려움</button>
+      </div>
+      <span style="margin-left:8px;">내 색</span>
+      <div class="seg" id="sideSeg">
+        <button data-side="w" class="active">⚪ 흰색</button>
+        <button data-side="b">⚫ 검은색</button>
+      </div>
+    </div>
+  </div>
 
   <div id="status"></div>
 
@@ -180,6 +231,9 @@
     </div>
 
     <div class="panel">
+      <h2>이 말은 어떻게 움직일까?</h2>
+      <div id="pieceInfo"></div>
+
       <h2>잡은 말</h2>
       <span class="cap-label">흰색이 잡은 말</span>
       <div class="captured-row" id="capByWhite"></div>
@@ -196,8 +250,9 @@
 
   <div class="help">
     <b>두는 방법</b><br>
-    1) 움직일 내 말을 누릅니다. → 갈 수 있는 칸들이 표시돼요.<br>
-    2) 가고 싶은 칸을 누르면 이동합니다. 같은 말을 다시 누르면 선택이 풀려요.
+    1) 움직일 내 말을 누릅니다. → 갈 수 있는 칸들이 표시되고, 오른쪽에 그 말의 <b>움직이는 법 설명</b>이 나와요.<br>
+    2) 가고 싶은 칸을 누르면 이동합니다. 같은 말을 다시 누르면 선택이 풀려요.<br>
+    3) 위쪽 <b>상대</b>에서 <b>🤖 컴퓨터</b>를 고르면 혼자서도 연습할 수 있어요. 난이도(쉬움/보통/어려움)와 내 색도 고를 수 있어요.
     <div class="legend">
       <span><span class="swatch" style="background:#f6f669"></span> 선택한 말</span>
       <span><span class="swatch" style="background:rgba(40,120,40,0.55)"></span> 이동 가능</span>
@@ -226,10 +281,27 @@ const GLYPH = {
   b: { k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟' }
 };
 const NAME_KO = { k:'킹', q:'퀸', r:'룩', b:'비숍', n:'나이트', p:'폰' };
+const NAME_EN = { k:'King', q:'Queen', r:'Rook', b:'Bishop', n:'Knight', p:'Pawn' };
+
+// 말별 움직임 설명(툴팁/패널용)
+const PIECE_INFO = {
+  p: '앞으로 한 칸씩 가요. 첫 이동은 두 칸도 OK! 잡을 때만 대각선 앞으로 가요. 끝줄에 닿으면 퀸 등으로 승급해요.',
+  n: 'L자 모양(2칸+1칸)으로 뛰어요. 유일하게 다른 말을 뛰어넘을 수 있어요!',
+  b: '대각선으로 원하는 만큼 쭉 가요. 한 색의 칸만 다녀요.',
+  r: '가로·세로로 원하는 만큼 쭉 가요.',
+  q: '가로·세로·대각선 모두 원하는 만큼! 가장 힘이 센 말이에요.',
+  k: '어느 방향이든 한 칸씩 움직여요. 절대 잡히면 안 되는 가장 소중한 말이에요.'
+};
 
 let board, turn, enPassant, history, selected, legalCache, flipped;
 let capByWhite, capByBlack;
 let pendingPromotion = null;
+
+// AI / 게임 모드
+let gameMode = '2p';     // '2p' = 둘이서, 'ai' = 컴퓨터와
+let humanColor = 'w';    // 컴퓨터 대국 시 사람이 잡는 색
+let aiDepth = 2;         // 1=쉬움, 2=보통, 3=어려움
+let aiThinking = false;
 
 function initialBoard() {
   const back = ['r','n','b','q','k','b','n','r'];
@@ -254,7 +326,9 @@ function newGame() {
   capByWhite = [];
   capByBlack = [];
   pendingPromotion = null;
+  aiThinking = false;
   render();
+  maybeAIMove();   // 컴퓨터가 흰색이면 먼저 둠
 }
 
 function inBounds(r, f) { return r >= 0 && r < 8 && f >= 0 && f < 8; }
@@ -441,6 +515,105 @@ function allLegalMoves(b, color, ep) {
   return out;
 }
 
+// ===== 컴퓨터(AI) =====
+const PIECE_VALUE = { p:100, n:320, b:330, r:500, q:900, k:20000 };
+
+// 흰색 관점 평가(양수=흰색 유리). 재료 가치 + 약한 중앙 보너스.
+function evaluate(b) {
+  let s = 0;
+  for (let r=0;r<8;r++) for (let f=0;f<8;f++) {
+    const p = b[r][f];
+    if (!p) continue;
+    let v = PIECE_VALUE[p.t];
+    if (p.t !== 'k') {
+      const centerDist = Math.abs(3.5 - f) + Math.abs(3.5 - r); // 0~7
+      v += (7 - centerDist); // 중앙일수록 +
+    }
+    s += p.c === 'w' ? v : -v;
+  }
+  return s;
+}
+
+const otherColor = c => (c === 'w' ? 'b' : 'w');
+const epAfter = mv => (mv.double ? { r:(mv.from.r+mv.to.r)/2, f:mv.from.f } : null);
+
+// 폰 승급 자동 처리(컴퓨터는 항상 퀸)
+function withAutoPromo(b, mv) {
+  const p = b[mv.from.r][mv.from.f];
+  if (p && p.t === 'p' && !mv.promotion) {
+    const last = p.c === 'w' ? 0 : 7;
+    if (mv.to.r === last) return Object.assign({}, mv, { promotion:'q' });
+  }
+  return mv;
+}
+
+// 좋은 수(잡기)를 먼저 보도록 정렬 → 가지치기 효율 ↑
+function orderMoves(moves) {
+  return moves.slice().sort((a,b) => (b.capture?1:0) - (a.capture?1:0));
+}
+
+function negamax(b, depth, alpha, beta, color, ep) {
+  let moves = allLegalMoves(b, color, ep);
+  if (moves.length === 0) {
+    if (inCheck(b, color)) return -1000000 - depth; // 빨리 지는 것을 더 나쁘게
+    return 0; // 스테일메이트
+  }
+  if (depth === 0) {
+    const e = evaluate(b);
+    return color === 'w' ? e : -e;
+  }
+  let best = -Infinity;
+  for (let mv of orderMoves(moves)) {
+    mv = withAutoPromo(b, mv);
+    const nb = cloneBoard(b);
+    applyMove(nb, mv, ep);
+    const score = -negamax(nb, depth-1, -beta, -alpha, otherColor(color), epAfter(mv));
+    if (score > best) best = score;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+function aiBestMove(b, color, ep, depth) {
+  let moves = allLegalMoves(b, color, ep);
+  if (moves.length === 0) return null;
+
+  // 쉬움: 가끔 아무 수나 둬서 초보자도 이길 수 있게
+  if (depth <= 1 && Math.random() < 0.35) {
+    const mv = moves[Math.floor(Math.random()*moves.length)];
+    return withAutoPromo(b, mv);
+  }
+
+  let best = -Infinity, bestMoves = [];
+  for (let mv of orderMoves(moves)) {
+    mv = withAutoPromo(b, mv);
+    const nb = cloneBoard(b);
+    applyMove(nb, mv, ep);
+    const score = -negamax(nb, depth-1, -Infinity, Infinity, otherColor(color), epAfter(mv));
+    if (score > best) { best = score; bestMoves = [mv]; }
+    else if (score === best) bestMoves.push(mv);
+  }
+  // 동점 수 중 무작위 → 매번 똑같지 않게
+  return bestMoves[Math.floor(Math.random()*bestMoves.length)];
+}
+
+function aiColor() { return otherColor(humanColor); }
+
+function maybeAIMove() {
+  if (gameMode !== 'ai') return;
+  if (pendingPromotion) return;
+  if (turn !== aiColor()) return;
+  if (allLegalMoves(board, turn, enPassant).length === 0) return; // 게임 종료
+  aiThinking = true;
+  updateStatus(inCheck(board, turn));
+  setTimeout(() => {
+    const mv = aiBestMove(board, turn, enPassant, aiDepth);
+    aiThinking = false;
+    if (mv) commitMove(mv, mv.promotion || null);
+  }, 300);
+}
+
 // ===== 렌더링 / 상호작용 =====
 const boardEl = document.getElementById('board');
 const statusEl = document.getElementById('status');
@@ -487,6 +660,9 @@ function render() {
       span.className = 'piece ' + (p.c==='w' ? 'white' : 'black');
       span.textContent = GLYPH[p.c][p.t];
       sq.appendChild(span);
+      // 데스크톱 마우스 오버 툴팁
+      const colorKo = p.c === 'w' ? '흰' : '검은';
+      sq.title = `${colorKo} ${NAME_KO[p.t]} (${NAME_EN[p.t]})\n${PIECE_INFO[p.t]}`;
     }
 
     const hl = highlights[r+','+f];
@@ -513,7 +689,25 @@ function render() {
   }
 
   renderCaptured();
+  renderPieceInfo();
   updateStatus(myCheck);
+}
+
+function renderPieceInfo() {
+  const el = document.getElementById('pieceInfo');
+  const p = selected ? board[selected.r][selected.f] : null;
+  if (!p) {
+    el.innerHTML = '<div class="pi-empty">말을 누르면 그 말이 어떻게 움직이는지 설명이 나와요. 🔍<br>(말 위에 마우스를 올려도 볼 수 있어요)</div>';
+    return;
+  }
+  const colorKo = p.c === 'w' ? '흰' : '검은';
+  const cls = p.c === 'w' ? 'white' : 'black';
+  el.innerHTML =
+    `<div class="pi-head">
+       <span class="pi-glyph ${cls}">${GLYPH[p.c][p.t]}</span>
+       <span class="pi-name">${colorKo} ${NAME_KO[p.t]} <small style="color:#999;font-weight:400;">${NAME_EN[p.t]}</small></span>
+     </div>
+     <div class="pi-desc">${PIECE_INFO[p.t]}</div>`;
 }
 
 function renderCaptured() {
@@ -523,14 +717,27 @@ function renderCaptured() {
     capByBlack.map(p => GLYPH.w[p]).join('');
 }
 
+function sideLabel(color) {
+  const base = color === 'w' ? '흰색' : '검은색';
+  if (gameMode !== 'ai') return base;
+  return color === humanColor ? `${base}(나)` : `${base}(컴퓨터)`;
+}
+
 function updateStatus(myCheck) {
   if (pendingPromotion) return;
+  if (aiThinking) {
+    statusEl.textContent = '🤖 컴퓨터가 생각 중...';
+    statusEl.style.color = '#bcd';
+    return;
+  }
   const moves = allLegalMoves(board, turn, enPassant);
-  const who = turn === 'w' ? '흰색' : '검은색';
+  const who = sideLabel(turn);
   if (moves.length === 0) {
     if (myCheck) {
-      const winner = turn === 'w' ? '검은색' : '흰색';
-      statusEl.textContent = `체크메이트! 🎉 ${winner} 승리!`;
+      const winColor = turn === 'w' ? 'b' : 'w';
+      let msg = `체크메이트! 🎉 ${sideLabel(winColor)} 승리!`;
+      if (gameMode === 'ai') msg = winColor === humanColor ? '체크메이트! 🎉 내가 이겼어요!' : '체크메이트! 컴퓨터 승리 🤖 다시 도전!';
+      statusEl.textContent = msg;
       statusEl.style.color = '#7fd17f';
     } else {
       statusEl.textContent = '스테일메이트 — 비겼어요! 🤝';
@@ -546,7 +753,9 @@ function updateStatus(myCheck) {
 }
 
 function onSquareClick(r, f) {
-  if (pendingPromotion) return;
+  if (pendingPromotion || aiThinking) return;
+  // 컴퓨터 대국 중 컴퓨터 차례에는 조작 불가
+  if (gameMode === 'ai' && turn === aiColor()) return;
   const p = board[r][f];
 
   // 이미 선택된 상태에서 합법 이동 칸을 누르면 이동
@@ -609,6 +818,7 @@ function commitMove(mv, promotion) {
   turn = turn === 'w' ? 'b' : 'w';
   selected = null;
   render();
+  maybeAIMove();
 }
 
 // ===== 승급 선택 =====
@@ -640,20 +850,55 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   if (confirm('새 게임을 시작할까요?')) newGame();
 });
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if (pendingPromotion) return;
-  const last = history.pop();
-  if (!last) return;
-  board = last.board;
-  turn = last.turn;
-  enPassant = last.enPassant;
-  capByWhite = last.capByWhite;
-  capByBlack = last.capByBlack;
+  if (pendingPromotion || aiThinking) return;
+  // 컴퓨터 대국이면 (컴퓨터 수 + 내 수) 두 번 되돌려 다시 내 차례로
+  const steps = (gameMode === 'ai') ? 2 : 1;
+  let restored = null;
+  for (let i=0;i<steps;i++) {
+    const last = history.pop();
+    if (!last) break;
+    restored = last;
+  }
+  if (!restored) return;
+  board = restored.board;
+  turn = restored.turn;
+  enPassant = restored.enPassant;
+  capByWhite = restored.capByWhite;
+  capByBlack = restored.capByBlack;
   selected = null;
   render();
 });
 document.getElementById('flipBtn').addEventListener('click', () => {
   flipped = !flipped;
   render();
+});
+
+// ===== 모드 / 난이도 / 색 선택 =====
+function setActive(segId, btn) {
+  document.querySelectorAll('#'+segId+' button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+document.getElementById('modeSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  gameMode = btn.dataset.mode;
+  setActive('modeSeg', btn);
+  document.getElementById('aiOptions').classList.toggle('hidden', gameMode !== 'ai');
+  newGame();
+});
+document.getElementById('diffSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  aiDepth = parseInt(btn.dataset.diff, 10);
+  setActive('diffSeg', btn);
+  newGame();
+});
+document.getElementById('sideSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  humanColor = btn.dataset.side;
+  setActive('sideSeg', btn);
+  // 검은색을 고르면 사람이 아래쪽에 오도록 보드를 뒤집어줌
+  flipped = (humanColor === 'b');
+  newGame();
 });
 
 flipped = false;
